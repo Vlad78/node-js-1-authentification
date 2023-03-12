@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 
 import User, { NewUser } from "./models/User.js";
 import { registerValidator } from "./validation/auth.js";
+import checkAuth from "./utils/checkAuth.js";
 
 const app = express();
 app.use(express.json());
@@ -106,6 +107,30 @@ app.post(
       const { password, ...rest } = tempUser._doc;
 
       res.status(200).json({ ...rest, token });
+    } catch (e) {
+      console.log(e);
+      res.status(500).json({ errors: ["Не удалось залогинится", e.message] });
+    }
+  }
+);
+
+// AUTHME
+
+app.get(
+  "/authme",
+  checkAuth,
+  async (req: express.Request<{}, {}, { userId: string }>, res: express.Response) => {
+    try {
+      const user = await User.findById(req.body.userId);
+
+      if (!user) {
+        return res.status(400).json({ errors: ["Пользователь не найден"] });
+      }
+
+      const tempUser = user as any;
+      const { password, ...rest } = tempUser._doc;
+
+      res.status(200).json({ ...rest });
     } catch (e) {
       console.log(e);
       res.status(500).json({ errors: ["Не удалось залогинится", e.message] });
