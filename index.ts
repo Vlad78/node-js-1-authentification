@@ -30,7 +30,7 @@ app.post(
   registerValidator,
   async (
     req: express.Request<{}, {}, NewUser>,
-    res: express.Response<any | { errors: ValidationError[] | any }>
+    res: express.Response<any | { errors: ValidationError[] | string[] }>
   ) => {
     try {
       const errors = validationResult(req);
@@ -61,9 +61,10 @@ app.post(
         }
       );
 
-      const { password, ...userData } = user;
+      const tempUser = user as any;
+      const { password, ...rest } = tempUser._doc;
 
-      res.status(200).json({ ...userData, token });
+      res.status(200).json({ ...rest, token });
     } catch (e) {
       console.log(e);
       res.status(500).json({ errors: ["Не удалось зарегистрироваться", e.message] });
@@ -71,22 +72,51 @@ app.post(
   }
 );
 
-app.post("/login", (req, res) => {
-  const token = jwt.sign(
-    {
-      email: req.body.email,
-      password: req.body.password,
-    },
-    "secretKey"
-  );
-  console.log(req.body);
+// LOGIN
 
-  res.json({
-    token: token,
-    email: req.body.email,
-  });
-});
+app.post(
+  "/login",
+  async (
+    req: express.Request<{}, {}, { email: string; password: string }>,
+    res: express.Response<any | { errors: ValidationError[] | string[] }>
+  ) => {
+    try {
+      const user = await User.findOne({ email: req.body.email });
+
+      if (!user) {
+        return res.status(400).json({ errors: ["Пользователь не найден"] });
+      }
+
+      const isMatch = await bcrypt.compare(req.body.password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ errors: ["Пользователь не найден"] });
+      }
+
+      const token = jwt.sign(
+        {
+          _id: user._id,
+        },
+        "secretKey",
+        {
+          expiresIn: "30d",
+        }
+      );
+
+      const tempUser = user as any;
+      const { password, ...rest } = tempUser._doc;
+
+      res.status(200).json({ ...rest, token });
+    } catch (e) {
+      console.log(e);
+      res.status(500).json({ errors: ["Не удалось залогинится", e.message] });
+    }
+  }
+);
 
 app.listen(3000, () => {
   console.log("Listening on port 3000");
 });
+
+// TODO затипизировать респонс
+// TODO спрятать секретные ключи
+// TODO разобраться с багом тс в 105 и 64
